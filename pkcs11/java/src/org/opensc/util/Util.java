@@ -52,11 +52,13 @@ public class Util
 	 */
 	public static byte[] translatePin(char[] pin)
 	{
-		if (pin == null) return null;
-		Charset charset = Charset.forName("UTF-8");
-		CharBuffer cb = CharBuffer.wrap(pin);
-		ByteBuffer bb = charset.encode(cb);
-		return bb.array();
+		byte[] ret = new byte[pin.length];
+		int i;
+
+		for (i=0;i<pin.length;i++) {
+			ret[i] = (byte)pin[i];
+		}
+		return ret;
 	}
 
 }

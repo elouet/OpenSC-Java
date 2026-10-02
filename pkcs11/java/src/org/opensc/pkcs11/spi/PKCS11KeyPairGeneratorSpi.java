@@ -33,8 +33,6 @@ import java.security.SecureRandom;
 import java.security.KeyStore.LoadStoreParameter;
 import java.security.spec.AlgorithmParameterSpec;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.opensc.pkcs11.PKCS11Provider;
 import org.opensc.pkcs11.PKCS11SessionStore;
 import org.opensc.pkcs11.spec.PKCS11DSAKeyPairGenParameterSpec;
@@ -52,7 +50,7 @@ import org.opensc.pkcs11.wrap.PKCS11RSAKeyPairGenerator;
  */
 public class PKCS11KeyPairGeneratorSpi extends KeyPairGeneratorSpi
 {
-    static Log log = LogFactory.getLog(PKCS11KeyPairGeneratorSpi.class);
+//    static Log log = LogFactory.getLog(PKCS11KeyPairGeneratorSpi.class);
 
     private PKCS11Provider provider;
     private String algorithm;

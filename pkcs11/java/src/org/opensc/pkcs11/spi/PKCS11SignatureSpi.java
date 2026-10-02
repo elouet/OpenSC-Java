@@ -25,6 +25,8 @@
 
 package org.opensc.pkcs11.spi;
 
+import android.util.Log;
+
 import java.security.InvalidKeyException;
 import java.security.InvalidParameterException;
 import java.security.PrivateKey;
@@ -55,12 +57,16 @@ public class PKCS11SignatureSpi extends SignatureSpi
 	private native void updateSignNative(long pvh, long shandle, long hsession, byte[] data, int off, int len) throws PKCS11Exception;
 	private native void updateSignNative1(long pvh, long shandle, long hsession, byte data) throws PKCS11Exception;
 	private native byte[] signNative(long pvh, long shandle, long hsession) throws PKCS11Exception;
-	
+
+	// Raw EC signing not allowed by OP-TEE PKCS#11 TA, need one-shot signing operation
+	private native byte[] signOneShotNative(long pvh, long shandle, long hsession, byte[] data, int off, int len) throws PKCS11Exception;
+
 	private native void initVerifyNative(long pvh, long shandle, long hsession, long hkey, int algo) throws PKCS11Exception;
 	private native void updateVerifyNative(long pvh, long shandle, long hsession, byte[] data, int off, int len) throws PKCS11Exception;
 	private native void updateVerifyNative1(long pvh, long shandle, long hsession, byte data) throws PKCS11Exception;
 	private native boolean verifyNative(long pvh, long shandle, long hsession, byte[] data) throws PKCS11Exception;
-	
+
+	private byte[] saveBuffer = null;
 	/**
 	 * Contructs an instance of PKCS11SignatureSpi using the given provider
 	 * and algorithm. Usually, you will not have to call this contructor,
@@ -95,6 +101,8 @@ public class PKCS11SignatureSpi extends SignatureSpi
 			pkcs11_alg = PKCS11Mechanism.CKM_DSA_SHA1;
 		else if (this.algorithm.equals("NONEwithDSA")) 
 			pkcs11_alg = PKCS11Mechanism.CKM_DSA;
+		else if (this.algorithm.equals("NONEwithECDSA"))
+			pkcs11_alg = PKCS11Mechanism.CKM_ECDSA;
 		else
 			throw new InvalidKeyException("Signature algorithm ["+
                     this.algorithm+"] is unsupported.");
@@ -154,7 +162,9 @@ public class PKCS11SignatureSpi extends SignatureSpi
 		if (! (privKey instanceof PKCS11SessionChild))
 			throw new InvalidKeyException("PKCS11 signature engine expects a valid PKCS11 object.");
 			
-		if (!this.algorithm.endsWith(privKey.getAlgorithm()))
+		// Reconciliate EC and ECDSA
+		if (!( (privKey.getAlgorithm() == "EC" && this.algorithm.endsWith("ECDSA"))  
+			|| this.algorithm.endsWith(privKey.getAlgorithm())))
 			throw new InvalidKeyException("PKCS11 key algorithm ["+
 					privKey.getAlgorithm()+
 					"] is incompatible with signature algorithm ["+
@@ -189,8 +199,13 @@ public class PKCS11SignatureSpi extends SignatureSpi
 		try
 		{
 			if (this.privateKey != null)
-				updateSignNative1(this.worker.getPvh(),
-                        this.worker.getSlotHandle(),this.worker.getSessionHandle(),b);
+				if (this.privateKey != null)
+					if (this.algorithm.startsWith("NONE")){
+						throw new SignatureException("PKCS11 exception :" + "byte update not allowed for single part signing");
+					}else {
+						updateSignNative1(this.worker.getPvh(),
+								this.worker.getSlotHandle(), this.worker.getSessionHandle(), b);
+					}
 			else
 				updateVerifyNative1(this.worker.getPvh(),
                         this.worker.getSlotHandle(),this.worker.getSessionHandle(),b);
@@ -214,12 +229,20 @@ public class PKCS11SignatureSpi extends SignatureSpi
 		try
 		{
 			if (this.privateKey != null)
+				if (this.algorithm.startsWith("NONE")){
+					// One-shot only : copy data and implement C_Sign on call to Final
+					// FIXME this is not concurrent !!!
+					saveBuffer = new byte[len];
+					System.arraycopy(data, off, saveBuffer, 0, len);
+
+				}else{
 				updateSignNative(this.worker.getPvh(),
                         this.worker.getSlotHandle(),this.worker.getSessionHandle(),data,off,len);
+				}
 			else
 				updateVerifyNative(this.worker.getPvh(),
                         this.worker.getSlotHandle(),this.worker.getSessionHandle(),data,off,len);
-				
+
 		} catch (PKCS11Exception e)
 		{
 			throw new SignatureException("PKCS11 exception",e);
@@ -240,9 +263,47 @@ public class PKCS11SignatureSpi extends SignatureSpi
 		
 		try
 		{
-			
-			return signNative(this.worker.getPvh(),
-                    this.worker.getSlotHandle(),this.worker.getSessionHandle());
+			if (this.algorithm.startsWith("NONE")){
+				byte[] ret = signOneShotNative(this.worker.getPvh(),
+						this.worker.getSlotHandle(), this.worker.getSessionHandle(), saveBuffer, 0, saveBuffer.length);
+				saveBuffer = null;
+
+				if (this.algorithm.equals("NONEwithECDSA")) {
+					// FIXME : this only works for EC curve 384 bits !
+					// Signature must be ASN.1 : makeshift encoding
+					// create SEQUENCE { INTEGER x  , INTEGER y }
+					// make sure biggest values are not taken as negative
+					// by adding a null byte before them
+					int asnsize = 48 + 48 + 2 + 2 + 2;
+					int xoffset = 0;
+					int yoffset = 0;
+
+					if ((ret[0] & 0x80) == 0x80) {
+						xoffset = 1;
+					}
+					if ((ret[48] & 0x80) == 0x80) {
+						yoffset = 1;
+					}
+
+					byte[] asn1ret = new byte[asnsize + xoffset + yoffset];
+
+					asn1ret[0] = 0x30;
+					asn1ret[1] = (byte) (0x64 + xoffset + yoffset);
+					asn1ret[2] = 0x02;
+					asn1ret[3] = (byte) (0x30 + xoffset);
+					System.arraycopy(ret, 0, asn1ret, 4 + xoffset, 0x30);
+					asn1ret[0x34 + xoffset] = 0x02;
+					asn1ret[0x34 + xoffset + 1] = (byte) (0x30 + yoffset);
+					System.arraycopy(ret, 0x30, asn1ret, 0x34 + xoffset + 2 + yoffset, 0x30);
+
+					return asn1ret;
+				}else {
+					return ret;
+				}
+			}else {
+				return signNative(this.worker.getPvh(),
+						this.worker.getSlotHandle(), this.worker.getSessionHandle());
+			}
 				
 		} catch (PKCS11Exception e)
 		{

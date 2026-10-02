@@ -25,24 +25,26 @@
 
 package org.opensc.pkcs11;
 
+import android.util.Log;
+
+import org.opensc.pkcs11.spec.PKCS11DSAKeyPairGenParameterSpec;
+import org.opensc.pkcs11.spec.PKCS11RSAKeyPairGenParameterSpec;
+import org.opensc.pkcs11.wrap.PKCS11Exception;
+import org.opensc.pkcs11.wrap.PKCS11PrivateKey;
+import org.opensc.pkcs11.wrap.PKCS11SessionChild;
+import org.opensc.util.DestroyableHolder;
+import org.opensc.util.DestroyableParent;
+
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.security.Provider;
 import java.security.ProviderException;
 import java.security.interfaces.DSAKey;
+import java.security.interfaces.ECKey;
 import java.security.interfaces.RSAKey;
 
 import javax.security.auth.DestroyFailedException;
 import javax.security.auth.Destroyable;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.opensc.pkcs11.spec.PKCS11DSAKeyPairGenParameterSpec;
-import org.opensc.pkcs11.spec.PKCS11RSAKeyPairGenParameterSpec;
-import org.opensc.pkcs11.wrap.PKCS11Exception;
-import org.opensc.pkcs11.wrap.PKCS11SessionChild;
-import org.opensc.util.DestroyableHolder;
-import org.opensc.util.DestroyableParent;
 
 /**
  * The PKCS#11 provider of the OpenSC project.
@@ -54,7 +56,7 @@ import org.opensc.util.DestroyableParent;
  */
 public class PKCS11Provider extends Provider implements DestroyableParent
 {
-	static private final Log log = LogFactory.getLog(PKCS11Provider.class);
+//	static private final Log log = LogFactory.getLog(PKCS11Provider.class);
 
 	/**
 	 * To be changed, when the interface changes.
@@ -67,7 +69,7 @@ public class PKCS11Provider extends Provider implements DestroyableParent
 	private static final double patchlevel = 0;
 	
 	static {
-		System.loadLibrary("opensc-PKCS11-"+version); 
+		System.loadLibrary("keystoretest");
 	} 
 	 
 	 private long pkcs11ModuleHandle;
@@ -100,7 +102,7 @@ public class PKCS11Provider extends Provider implements DestroyableParent
                 this.destroyableHolder.destroy();
 			} catch (DestroyFailedException e)
 			{
-				log.error("Failure during destruction of C resources:",e);
+				Log.e("OpenSC-PKCS11","Failure during destruction of C resources:",e);
 			}
 			
 			try
@@ -108,7 +110,7 @@ public class PKCS11Provider extends Provider implements DestroyableParent
 				unloadPKCS11Module(this.pkcs11ModuleHandle);
 			} catch (PKCS11Exception e)
 			{
-				log.error("Failure unloading PKCS#11 module:",e);
+				Log.e("OpenSC-PKCS11","Failure unloading PKCS#11 module:",e);
 			}
 			
             this.pkcs11ModuleHandle = 0L;
@@ -175,8 +177,10 @@ public class PKCS11Provider extends Provider implements DestroyableParent
 		putService(new PKCS11SignatureService
         		(this, "Signature", "SHA1withDSA", "org.opensc.pkcs11.spi.PKCS11SignatureSpi"));
 		putService(new PKCS11SignatureService
-        		(this, "Signature", "NONEwithDSA", "org.opensc.pkcs11.spi.PKCS11SignatureSpi"));
-        putService(new PKCS11CipherService
+				(this, "Signature", "NONEwithDSA", "org.opensc.pkcs11.spi.PKCS11SignatureSpi"));
+		putService(new PKCS11SignatureService
+				(this, "Signature", "NONEwithECDSA", "org.opensc.pkcs11.spi.PKCS11SignatureSpi"));
+		putService(new PKCS11CipherService
                    (this, "Cipher", "RSA/ECB/PKCS1Padding", "org.opensc.pkcs11.spi.PKCS11CipherSpi"));
         putService(new PKCS11KeyPairGeneratorService
                    (this, "KeyPairGenerator", "RSA", "org.opensc.pkcs11.spi.PKCS11KeyPairGeneratorSpi"));
@@ -273,15 +277,21 @@ public class PKCS11Provider extends Provider implements DestroyableParent
 		@Override
 		public boolean supportsParameter(Object param)
 		{
+
 			if (! (param instanceof PKCS11SessionChild)) return false;
-			
+
+			String alg = super.getAlgorithm();
+
 			if (param instanceof RSAKey)
-				return super.getAlgorithm().endsWith("RSA");
-			
+				return alg.endsWith("RSA");
+
 			if (param instanceof DSAKey)
-				return super.getAlgorithm().endsWith("DSA");
-			
-			return false;
+				return alg.endsWith("DSA");
+
+			if (param instanceof PKCS11PrivateKey)
+				return alg.endsWith("ECDSA");
+
+			return  false;
 		}
 	}
 	

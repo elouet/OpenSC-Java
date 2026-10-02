@@ -57,16 +57,16 @@ public class PKCS11DSAPrivateKey extends PKCS11PrivateKey implements
 		super(session, CKK_DSA, true, handle);
 		
 		byte [] raw_x = getRawAttribute(PKCS11Attribute.CKA_VALUE);
-		this.x = new BigInteger(raw_x);
+		this.x = BigUInteger.newBigUInteger(raw_x);
 		
 		raw_x = getRawAttribute(PKCS11Attribute.CKA_PRIME);
-		BigInteger p = new BigInteger(raw_x);
+		BigInteger p = BigUInteger.newBigUInteger(raw_x);
 			
 		raw_x = getRawAttribute(PKCS11Attribute.CKA_SUBPRIME);
-		BigInteger q = new BigInteger(raw_x);
+		BigInteger q = BigUInteger.newBigUInteger(raw_x);
 			
 		raw_x = getRawAttribute(PKCS11Attribute.CKA_BASE);
-		BigInteger g = new BigInteger(raw_x);
+		BigInteger g = BigUInteger.newBigUInteger(raw_x);
 			
 		this.params = new DSAParameterSpec(p,q,g);
 	}

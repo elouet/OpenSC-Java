@@ -23,8 +23,8 @@
 #ifndef __JNI_P11_PRIVATE_H__
 #define __JNI_P11_PRIVATE_H__ 1
 
-#include <jnix.h>
-#include <opensc/pkcs11.h>
+#include "jnix.h"
+#include "opensc/pkcs11.h"
 
 typedef struct pkcs11_module_st pkcs11_module_t;
 

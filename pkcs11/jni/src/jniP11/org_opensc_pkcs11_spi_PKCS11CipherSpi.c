@@ -21,9 +21,9 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
  */
 
-#include <org_opensc_pkcs11_spi_PKCS11CipherSpi.h>
+#include "org_opensc_pkcs11_spi_PKCS11CipherSpi.h"
 
-#include <jniP11private.h>
+#include "jniP11private.h"
 
 /*
  * Class:     org_opensc_pkcs11_spi_PKCS11CipherSpi

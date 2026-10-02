@@ -24,6 +24,7 @@
  ***********************************************************/
 
 package org.opensc.pkcs11.wrap;
+import static org.opensc.pkcs11.wrap.BigUInteger.newBigUInteger;
 
 import java.io.ByteArrayInputStream;
 import java.io.UnsupportedEncodingException;
@@ -72,7 +73,7 @@ public class PKCS11Certificate extends PKCS11Object
 		this.issuer = new X500Principal(raw_issuer); 
 		
 		byte[] raw_serial = getRawAttribute(PKCS11Attribute.CKA_SERIAL_NUMBER);
-		this.serial = new BigInteger(raw_serial);
+		this.serial = newBigUInteger(raw_serial);
 	}
 
 	/**

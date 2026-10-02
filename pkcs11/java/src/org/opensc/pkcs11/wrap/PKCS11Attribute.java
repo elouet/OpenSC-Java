@@ -124,9 +124,7 @@ public class PKCS11Attribute
     private static int endianness;
     
     static {
-        endianness =
-            "little".equalsIgnoreCase(System.getProperty("sun.cpu.endian")) ?
-            LITTLE_ENDIAN : BIG_ENDIAN;
+        endianness = LITTLE_ENDIAN;
     }
  
     private int kind;

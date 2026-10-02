@@ -50,9 +50,8 @@ public class PKCS11NeRSAPrivateKey extends PKCS11PrivateKey implements RSAKey
 	protected PKCS11NeRSAPrivateKey(PKCS11Session session, long handle) throws PKCS11Exception
 	{
 		super(session, CKK_RSA, false, handle);
-		
-		byte [] raw_modulus = getRawAttribute(PKCS11Attribute.CKA_MODULUS);
-		this.modulus = new BigInteger(raw_modulus);
+
+		this.modulus = BigUInteger.newBigUInteger(getRawAttribute(PKCS11Attribute.CKA_MODULUS));
 	}
 
 	/* (non-Javadoc)

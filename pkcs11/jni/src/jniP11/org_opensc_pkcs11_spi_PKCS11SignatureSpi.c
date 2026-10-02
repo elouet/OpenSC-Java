@@ -21,9 +21,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
  */
 
-#include <org_opensc_pkcs11_spi_PKCS11SignatureSpi.h>
-
-#include <jniP11private.h>
+#include "org_opensc_pkcs11_spi_PKCS11SignatureSpi.h"
+#include "jniP11private.h"
 
 /*
  * Class:     org_opensc_pkcs11_spi_PKCS11SignatureSpi
@@ -186,6 +185,84 @@ JNIEXPORT jbyteArray JNICALL JNIX_FUNC_NAME(Java_org_opensc_pkcs11_spi_PKCS11Sig
 
   return ret;
 }
+
+
+/*
+ * Class:     org_opensc_pkcs11_spi_PKCS11SignatureSpi
+ * Method:    signNative
+ * Signature: (JJJ)[B
+ */
+JNIEXPORT jbyteArray JNICALL JNIX_FUNC_NAME(Java_org_opensc_pkcs11_spi_PKCS11SignatureSpi_signOneShotNative)
+        (JNIEnv *env, jobject jsig, jlong mh, jlong shandle, jlong hsession,jbyteArray ba, jint off, jint len)
+{
+    int rv;
+    CK_BYTE_PTR pPart;
+    CK_BYTE_PTR pSignature = NULL;
+    CK_ULONG    ulSignatureLen = 48;
+    jbyteArray ret;
+    pkcs11_slot_t *slot;
+    pkcs11_module_t *mod =  pkcs11_module_from_jhandle(env,mh);
+    if (!mod) return 0;
+
+    slot = pkcs11_slot_from_jhandle(env,shandle);
+    if (!slot) return 0;
+
+    if (len < 0)
+    {
+        jnixThrowException(env,"org/opensc/pkcs11/wrap/PKCS11Exception",
+                           "Invalid data length %d.",(int)len);
+        return NULL;
+    }
+
+    if (ba == NULL)
+    {
+        jnixThrowException(env,"org/opensc/pkcs11/wrap/PKCS11Exception",
+                           "NULL input data.");
+        return NULL;
+    }
+
+    if (off < 0 || off > len)
+    {
+        jnixThrowException(env,"org/opensc/pkcs11/wrap/PKCS11Exception",
+                           "Invalid input offset %d.",(int)off);
+        return NULL;
+    }
+
+    allocaCArrayFromJByteArrayOffLen(pPart,env,ba,off,len);
+
+
+
+    rv = mod->method->C_Sign(hsession,pPart, len, pSignature,&ulSignatureLen);
+
+    if (rv  != CKR_OK)
+    {
+        jnixThrowExceptionI(env,"org/opensc/pkcs11/wrap/PKCS11Exception",rv,
+                            "C_SignFinal failed for slot %d.",
+                            (int)slot->id);
+        return 0;
+    }
+
+    pSignature = (CK_BYTE_PTR)alloca(ulSignatureLen);
+
+    rv = mod->method->C_Sign(hsession,pPart, len, pSignature,&ulSignatureLen);
+
+
+    if (rv  != CKR_OK)
+    {
+        jnixThrowExceptionI(env,"org/opensc/pkcs11/wrap/PKCS11Exception",rv,
+                            "C_SignFinal failed for slot %d.",
+                            (int)slot->id);
+        return 0;
+    }
+
+    ret = (*env)->NewByteArray(env,ulSignatureLen);
+    if (ret)
+        (*env)->SetByteArrayRegion(env,ret,0,ulSignatureLen,(jbyte*)pSignature);
+
+    return ret;
+}
+
+
 
 /*
  * Class:     org_opensc_pkcs11_spi_PKCS11SignatureSpi

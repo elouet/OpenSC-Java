@@ -21,7 +21,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
  */
 
-#include <jniP11private.h>
+#include "jniP11private.h"
 #include <stdlib.h>
 
 #ifdef DEBUG
@@ -102,7 +102,9 @@ static CK_RV pkcs11_unlock_mutex(CK_VOID_PTR pMutex)
 #else
 
 #include <pthread.h>
-#include <ltdl.h>
+#include <dlfcn.h>
+#include <errno.h>
+//#include <ltdl.h>
 
 static CK_RV pkcs11_create_mutex(CK_VOID_PTR_PTR ppMutex)
 {
@@ -234,12 +236,12 @@ pkcs11_module_t *new_pkcs11_module(JNIEnv *env, jstring filename)
       goto failed;
     }
 #else
-  if (lt_dlinit() != 0)
+/* if (dlinit() != 0)
     {
       jnixThrowException(env,"org/opensc/pkcs11/wrap/PKCS11Exception",
                          "Unable ot initialize dynamic function loading.");
       return 0;
-    }
+    }*/
 
   getBytesId = (*env)->GetMethodID(env,sc,"getBytes","()[B");
 
@@ -262,12 +264,12 @@ pkcs11_module_t *new_pkcs11_module(JNIEnv *env, jstring filename)
   (*env)->GetByteArrayRegion(env,filename8,0,sz,(jbyte*)mod->name);
   mod->name[sz] = 0;
 
-  mod->handle = lt_dlopen(mod->name);
+  mod->handle = dlopen(mod->name, RTLD_NOW);
 
   if (mod->handle == NULL)
     {
       jnixThrowException(env,"org/opensc/pkcs11/wrap/PKCS11Exception",
-                         "Cannot open PKCS11 module %s: %s.",mod->name,lt_dlerror());
+                         "Cannot open PKCS11 module %s: %x (errno : %s).",mod->name,(unsigned  long)mod->handle, dlerror()/*lt_dlerror()*/);
       goto failed;
     }
 #endif
@@ -284,13 +286,13 @@ pkcs11_module_t *new_pkcs11_module(JNIEnv *env, jstring filename)
       
 #else
   c_get_function_list = (CK_RV (*)(CK_FUNCTION_LIST_PTR_PTR))
-    lt_dlsym(mod->handle, "C_GetFunctionList");
+    dlsym(mod->handle, "C_GetFunctionList");
     
   if (!c_get_function_list)
     {
       jnixThrowException(env,"org/opensc/pkcs11/wrap/PKCS11Exception",
                          "Cannot find function C_GetFunctionList in PKCS11 module %s: %s.",
-                         mod->name,lt_dlerror());
+                         mod->name,""/*lt_dlerror()*/);
       goto failed;
     }
 #endif
@@ -342,12 +344,12 @@ failed:
     FreeLibrary(mod->handle);
 #else
   if (mod->handle)
-    lt_dlclose(mod->handle);
+    dlclose(mod->handle);
 #endif
   free(mod);
 
 #ifndef WIN32
-  lt_dlexit();
+  //dlexit();
 #endif
   return 0;
 }
@@ -387,7 +389,7 @@ void destroy_pkcs11_module(JNIEnv *env, pkcs11_module_t *mod)
     FreeLibrary(mod->handle);
 #else
   if (mod->handle)
-    lt_dlclose(mod->handle);
+    dlclose(mod->handle);
 #endif
 
   if (mod->name) free(mod->name);
@@ -396,6 +398,6 @@ void destroy_pkcs11_module(JNIEnv *env, pkcs11_module_t *mod)
   free(mod);
 
 #ifndef WIN32
-  lt_dlexit();
+  //lt_dlexit();
 #endif
 }

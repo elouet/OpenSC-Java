@@ -25,11 +25,24 @@
 
 package org.opensc.pkcs11.spi;
 
+import android.util.Log;
+
+import org.opensc.pkcs11.PKCS11LoadStoreParameter;
+import org.opensc.pkcs11.PKCS11Provider;
+import org.opensc.pkcs11.PKCS11SessionStore;
+import org.opensc.pkcs11.wrap.PKCS11Certificate;
+import org.opensc.pkcs11.wrap.PKCS11Exception;
+import org.opensc.pkcs11.wrap.PKCS11PrivateKey;
+import org.opensc.util.PKCS11Id;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.InvalidKeyException;
 import java.security.Key;
+import java.security.KeyStore.Entry;
+import java.security.KeyStore.LoadStoreParameter;
+import java.security.KeyStore.PasswordProtection;
 import java.security.KeyStoreException;
 import java.security.KeyStoreSpi;
 import java.security.NoSuchAlgorithmException;
@@ -37,9 +50,6 @@ import java.security.NoSuchProviderException;
 import java.security.ProviderException;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
-import java.security.KeyStore.Entry;
-import java.security.KeyStore.LoadStoreParameter;
-import java.security.KeyStore.PasswordProtection;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
@@ -55,16 +65,6 @@ import java.util.Vector;
 
 import javax.security.auth.x500.X500Principal;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.opensc.pkcs11.PKCS11LoadStoreParameter;
-import org.opensc.pkcs11.PKCS11Provider;
-import org.opensc.pkcs11.PKCS11SessionStore;
-import org.opensc.pkcs11.wrap.PKCS11Certificate;
-import org.opensc.pkcs11.wrap.PKCS11Exception;
-import org.opensc.pkcs11.wrap.PKCS11PrivateKey;
-import org.opensc.util.PKCS11Id;
-
 /**
  * This is a JAVA KeyStore, which accesses a slot on a PKCS#11 cryptographic token.
  *
@@ -72,7 +72,7 @@ import org.opensc.util.PKCS11Id;
  */
 public class PKCS11KeyStoreSpi extends KeyStoreSpi
 {
-	static private final Log log = LogFactory.getLog(PKCS11KeyStoreSpi.class);
+//	static private final Log log = LogFactory.getLog(PKCS11KeyStoreSpi.class);
 
 	static private final int MAX_SIMILAR_CERTIFICATES = 32;
 	
@@ -133,7 +133,18 @@ public class PKCS11KeyStoreSpi extends KeyStoreSpi
 	{
 		PKCS11KSEntry entry = this.entries.get(name);
 		if (entry == null) return null;
-		return entry.privateKey;
+		if (entry.privateKey != null) {
+			return entry.privateKey;
+		}else if (entry.certificate != null){
+			Key ret;
+			try {
+				ret = entry.certificate.getCertificate().getPublicKey();
+			}catch (Exception e){
+				return null;
+			}
+			return ret;
+		}
+		return null;
 	}
 	
 	/**
@@ -192,66 +203,68 @@ public class PKCS11KeyStoreSpi extends KeyStoreSpi
 		
 		if (!(endEntity instanceof X509Certificate))
 		{
-			log.error("engineGetCertificateChain: Only X.509 certificates are supported.");
+			Log.e("OpenSC-PKCS11","engineGetCertificateChain: Only X.509 certificates are supported.");
 			return null;
 		}
 		
 		List<Certificate> ret = new ArrayList<Certificate>();
 		
 		ret.add(endEntity);
-		
-		X509Certificate x509Certificate = (X509Certificate)endEntity;
-		
-		try
-		{
-			// OK ,this is acrude form of certificate chain evaluation.
-			// Assuming, that the upper layer does a more detailed anlysis of the
-			// validity period and key extensions, we only search the chain by
-			// finding the issuing certificate on the token using the issuer DN
-			// and trying to check the Signature on the certificate using the
-			// public key on the next certificate.
-			while (!isRootCA(x509Certificate))
-			{
-				Map<String,PKCS11KSEntry> centries =
-					getAllCertificatesForSubject(x509Certificate.getIssuerX500Principal());
-				
-				X509Certificate x509NextCert = null;
-				
-				for (PKCS11KSEntry entry : centries.values())
-				{
-					Certificate next = entry.getDecodedCertificate();
-									
-					X509Certificate x509Next = (X509Certificate)next;
-				
-					if (!x509Next.getSubjectX500Principal().equals(x509Certificate.getIssuerX500Principal()))
-						continue;
-						
-					try {
-						x509Certificate.verify(x509Next.getPublicKey());
-						x509NextCert = x509Next;
-						break;
-					}
-					catch (Exception e) {
-						log.warn("Exception during evaluation of certificate chain:",e);
-					}
-				}
-				
-				if (x509NextCert == null)
-				{
-					throw new CertificateException("Cannot find the issuing CA for certificate ["+x509Certificate+"].");
-				}
-				
-				x509Certificate = x509NextCert;
-				ret.add(x509Certificate);
-			}
-			
-			return ret.toArray(new Certificate[0]);
-			
-		} catch (Exception e)
-		{
-			log.error("Exception caught during analysis of the certificate chain:",e);
-		}
-		return null;
+
+		// PKCS11 does not have chain, only leaf cert
+		return ret.toArray(ret.toArray(new Certificate[0]));
+//		X509Certificate x509Certificate = (X509Certificate)endEntity;
+//
+//		try
+//		{
+//			// OK ,this is acrude form of certificate chain evaluation.
+//			// Assuming, that the upper layer does a more detailed anlysis of the
+//			// validity period and key extensions, we only search the chain by
+//			// finding the issuing certificate on the token using the issuer DN
+//			// and trying to check the Signature on the certificate using the
+//			// public key on the next certificate.
+//			while (!isRootCA(x509Certificate))
+//			{
+//				Map<String,PKCS11KSEntry> centries =
+//					getAllCertificatesForSubject(x509Certificate.getIssuerX500Principal());
+//
+//				X509Certificate x509NextCert = null;
+//
+//				for (PKCS11KSEntry entry : centries.values())
+//				{
+//					Certificate next = entry.getDecodedCertificate();
+//
+//					X509Certificate x509Next = (X509Certificate)next;
+//
+//					if (!x509Next.getSubjectX500Principal().equals(x509Certificate.getIssuerX500Principal()))
+//						continue;
+//
+//					try {
+//						x509Certificate.verify(x509Next.getPublicKey());
+//						x509NextCert = x509Next;
+//						break;
+//					}
+//					catch (Exception e) {
+//						Log.d("OpenSC-PKCS11","Exception during evaluation of certificate chain:",e);
+//					}
+//				}
+//
+//				if (x509NextCert == null)
+//				{
+//					throw new CertificateException("Cannot find the issuing CA for certificate ["+x509Certificate+"].");
+//				}
+//
+//				x509Certificate = x509NextCert;
+//				ret.add(x509Certificate);
+//			}
+//
+//			return ret.toArray(new Certificate[0]);
+//
+//		} catch (Exception e)
+//		{
+//			Log.e("OpenSC-PKCS11","Exception caught during analysis of the certificate chain:",e);
+//		}
+//		return null;
 	}
 
 	/* (non-Javadoc)
@@ -267,10 +280,10 @@ public class PKCS11KeyStoreSpi extends KeyStoreSpi
 			return entry.getDecodedCertificate();
 		} catch (PKCS11Exception e)
 		{
-			log.error("PKCS11 Error decoding Certificate for entry "+name+":",e);
+			Log.e("OpenSC-PKCS11","PKCS11 Error decoding Certificate for entry "+name+":",e);
 		} catch (CertificateException e)
 		{
-			log.error("Certificate Error decoding Certificate for entry "+name+":",e);
+			Log.e("OpenSC-PKCS11","Certificate Error decoding Certificate for entry "+name+":",e);
 		}
 		return null;
 	}
@@ -420,7 +433,7 @@ public class PKCS11KeyStoreSpi extends KeyStoreSpi
 	{
 		if (! (certificate instanceof X509Certificate))
 		{
-			log.error("engineGetCertificateAlias: Only X.509 certificates are supported.");
+			Log.e("OpenSC-PKCS11","engineGetCertificateAlias: Only X.509 certificates are supported.");
 		}
 		
 		X509Certificate x509Certificate = (X509Certificate)certificate;
@@ -441,10 +454,10 @@ public class PKCS11KeyStoreSpi extends KeyStoreSpi
 				
 			} catch (PKCS11Exception e)
 			{
-				log.error("PKCS11 Error decoding Certificate for entry "+name+":",e);
+				Log.e("OpenSC-PKCS11","PKCS11 Error decoding Certificate for entry "+name+":",e);
 			} catch (CertificateException e)
 			{
-				log.error("Certificate Error decoding Certificate for entry "+name+":",e);
+				Log.e("OpenSC-PKCS11","Certificate Error decoding Certificate for entry "+name+":",e);
 			}
 		}
 		

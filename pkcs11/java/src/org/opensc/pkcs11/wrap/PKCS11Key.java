@@ -129,7 +129,7 @@ public class PKCS11Key extends PKCS11Object implements Key
 		case CKK_RC2: return "RC2";
 		case CKK_RC4: return "RC4";
 		case CKK_RC5: return "RC5";
-		case CKK_ECDSA: return "ECDSA";
+		case CKK_ECDSA: return "EC"; // "ECDSA"
 		}
 
 		return null;
